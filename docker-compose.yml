@@ -1,0 +1,47 @@
+services:
+  db-init:
+    image: nouchka/sqlite3:latest
+    container_name: pizzaria-db-init
+    volumes:
+      - ./data:/data
+      - ./db/init:/init:ro
+    working_dir: /data
+    entrypoint: ["sh", "-lc"]
+    command: >
+      "sqlite3 /data/db.sqlite3 < /init/001_schema.sql &&
+       sqlite3 /data/db.sqlite3 < /init/002_seed.sql &&
+       echo 'SQLite inicializado'"
+    restart: "no"
+
+  sqlite-web:
+    image: coleifer/sqlite-web:latest
+    container_name: pizzaria-sqlite-web
+    ports:
+      - "${SQLITE_WEB_PORT:-8080}:8080"
+    environment:
+      - SQLITE_DATABASE=/data/db.sqlite3
+    volumes:
+      - ./data:/data
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+
+  api:
+    build:
+      context: ./api
+    container_name: pizzaria-api
+    environment:
+      - FLASK_ENV=development
+      - DB_PATH=/app/data/db.sqlite3
+      - PUBLIC_DIR=/app/public
+    volumes:
+      - ./api/app:/app/app
+      - ./data:/app/data
+      - ./public:/app/public
+    ports:
+      - "8000:8000"
+    depends_on:
+      sqlite-web:
+        condition: service_started    
+    env_file:
+      - .env
